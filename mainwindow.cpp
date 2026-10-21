@@ -228,7 +228,7 @@ void MainWindow::startCapture()
         QMessageBox::warning(this, tr("无法启动"), tr("请选择有效的设备/格式/分辨率。"));
         return;
     }
-    diag(QString("开始采集 %1 %2 %3x%4").arg(dev).arg(fourcc).arg(sz.width()).arg(sz.height()));
+    diag(QString("开始采集 %1 fcc=%2 %3x%4").arg(dev).arg(fcc).arg(sz.width()).arg(sz.height()));
     m_thread->setDevice(dev);
     m_thread->setFourcc(fcc);
     m_thread->setSize(sz.width(), sz.height());
