@@ -171,6 +171,13 @@ void ViewWidget::fitToWindow()
     {
         QMutexLocker lock(&m_mutex);
         applyZoomLocked(QPointF(rect().center()), 1.0);
+        // 强制整幅居中:不受之前拖拽残留偏移影响
+        if (!m_img.isNull()) {
+            const double eff = fitScaleLocked();          // m_zoom=1 → 适合窗口
+            const double dx = m_img.width() * eff, dy = m_img.height() * eff;
+            m_pan.setX((width() - dx) / 2.0);
+            m_pan.setY((height() - dy) / 2.0);
+        }
     }
     emit zoomChanged(m_zoom);
     update();
