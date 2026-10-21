@@ -46,6 +46,13 @@ static const int kMat[4][8] = {
     {1024,   0,   0, 1613, -192, -479, 1900,    0},  // BT.709 全范围
     {1164, -16,   0, 1836, -218, -546, 2163,    0},  // BT.709 限制范围 16..235 (OBS v4l2 默认)
 };
+// OBS shader 转换前先按范围钳制 YUV; 行=<yMin,yMax,cMin,cMax>
+static const int kRange[4][4] = {
+    {  0, 255,   0, 255},  // 全范围
+    { 16, 235,  16, 240},  // 限制范围 16..235 / 16..240
+    {  0, 255,   0, 255},  // 全范围
+    { 16, 235,  16, 240},  // 限制范围(与 OBS video_matrices 的 range_min/max 一致)
+};
 // 查表(必须 int;/短整型会被 516*127≈6.5万 撑爆 —— 曾导致 YUYV 颜色错乱)
 struct Tabs { int cbR[256], crR[256], cbG[256], crG[256], cbB[256], crB[256]; };
 static Tabs g_tabs[4];
@@ -79,6 +86,8 @@ static QImage yuvToRgb32(const uchar *src, int w, int h, int stride,
     const int *bg = kBgLayout[layout];
     const Tabs &T = g_tabs[matrix];
     const int ys = kMat[matrix][0], yo = kMat[matrix][1];
+    const int ymin = kRange[matrix][0], ymax = kRange[matrix][1];
+    const int cmin = kRange[matrix][2], cmax = kRange[matrix][3];
 
     int rowBytes = w * 2;                   // YUYV: 每像素 2 字节
     if (stride < rowBytes) stride = rowBytes;
@@ -91,8 +100,11 @@ static QImage yuvToRgb32(const uchar *src, int w, int h, int stride,
         const uchar *p = src + size_t(y) * stride;
         quint32 *d = reinterpret_cast<quint32 *>(dst + size_t(y) * w * 4);
         for (int x = 0; x < pairs; ++x) {
-            const int y0 = p[bg[0]], c0 = p[bg[1]];
-            const int y1 = p[bg[2]], c1 = p[bg[3]];
+            // 先按范围钳制(对齐 OBS shader clamp)再查表
+            const int y0 = qBound(ymin, int(p[bg[0]]), ymax);
+            const int c0 = qBound(cmin, int(p[bg[1]]), cmax);
+            const int y1 = qBound(ymin, int(p[bg[2]]), ymax);
+            const int c1 = qBound(cmin, int(p[bg[3]]), cmax);
             p += 4;
             const int yb0 = (ys * (y0 + yo) + 512) >> 10;
             const int yb1 = (ys * (y1 + yo) + 512) >> 10;

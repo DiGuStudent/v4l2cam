@@ -180,20 +180,19 @@ void MainWindow::fillColorBox()
 {
     static const char *lay[] = { "YUYV", "YVYU", "UYVY", "VYUY" };
     static const char *mat[] = { "BT.601全", "BT.601窄", "BT.709全", "BT.709窄(=OBS)" };
-    QSettings s;
-    const int savedLayout = s.value("decode/layout", 0).toInt();
-    const int savedMatrix = s.value("decode/matrix", 3).toInt();   // 默认同 OBS: 709 窄
+    // 每次启动强制 OBS 同款默认(YUYV · BT.709窄),下拉只本次临时改,
+    // 防止测试时的残留配置把默认顶成别的 → 杜绝"怎么颜色又不对"的一整类问题
+    const int layout = 0, matrix = 3;
 
     m_colorBox->blockSignals(true);
     for (int l = 0; l < 4; ++l)
         for (int m = 0; m < 4; ++m)
             m_colorBox->addItem(QString("%1 · %2").arg(lay[l]).arg(mat[m]),
                                 l * 4 + m);
-    const int idx = qBound(0, savedLayout * 4 + savedMatrix, m_colorBox->count() - 1);
-    m_colorBox->setCurrentIndex(idx);
+    m_colorBox->setCurrentIndex(layout * 4 + matrix);
     m_colorBox->blockSignals(false);
 
-    m_thread->setDecode(savedLayout, savedMatrix);
+    m_thread->setDecode(layout, matrix);
 }
 
 void MainWindow::onColorChanged()
