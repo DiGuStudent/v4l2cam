@@ -22,6 +22,7 @@ protected:
 private slots:
     void onDeviceChanged();
     void onFormatChanged();
+    void onColorChanged();
     void startCapture();
     void stopCapture();
     void toggleCapture();
@@ -35,6 +36,7 @@ private:
     void repopulateFormats();
     void repopulateSizes();
     void setStreamingUi(bool streaming);
+    void fillColorBox();
 
     ViewWidget *m_view = nullptr;
     CaptureThread *m_thread = nullptr;
@@ -42,6 +44,7 @@ private:
     QComboBox *m_deviceBox = nullptr;
     QComboBox *m_formatBox = nullptr;
     QComboBox *m_sizeBox = nullptr;
+    QComboBox *m_colorBox = nullptr;
     QToolButton *m_startBtn = nullptr;
     QLabel *m_statLabel = nullptr;
 

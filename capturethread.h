@@ -25,6 +25,15 @@ public:
     void setFourcc(unsigned int fourcc) { m_fourcc = fourcc; }
     void setSize(int w, int h) { m_w = w; m_h = h; }
 
+    // YUV 解析参数(可随时改,下一帧生效,无需重启采集)
+    // layout: 0=YUYV 1=YVYU 2=UYVY 3=VYUY
+    // matrix: 0=BT.601全范围 1=BT.601限制范围(16-235) 2=BT.709全范围
+    void setDecode(int layout, int matrix)
+    {
+        m_layout.store(layout);
+        m_matrix.store(matrix);
+    }
+
     void requestStop() { m_stop.store(true); }
 
     struct FormatInfo { unsigned int fourcc; QString description; };
@@ -51,6 +60,8 @@ private:
     int m_w = 1920;
     int m_h = 1080;
     std::atomic_bool m_stop{false};
+    std::atomic_int m_layout{0};    // YUYV 字节序
+    std::atomic_int m_matrix{0};    // BT.601 全范围
 };
 
 #endif // CAPTURETHREAD_H

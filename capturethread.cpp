@@ -17,60 +17,79 @@
 
 #include <jpeglib.h>
 
-// ===================== YUYV -> RGB32 (BT.601, 整数查表) =====================
-static short g_crv[256]; //  1.402 * (V-128) * 256
-static short g_cgu[256]; // -0.344 * (U-128) * 256
-static short g_cbu[256]; //  1.772 * (U-128) * 256
-static short g_cgv[256]; // -0.714 * (V-128) * 256
-
-static void initYuvTables()
+// ============== YUV -> RGB32:可切换 字节序 + 颜色矩阵 (整数查表) ==============
+// 四种字节序:每 4 字节 = 两个像素共享一对色差。字节序下标:
+//   {y0, c0, y1, c1} = 该 4 字节组中 亮度0/色差0/亮度1/色差1 的偏移
+static const int kBgLayout[4][4] = {
+    {0, 1, 2, 3},   // YUYV: [Y0, Cb, Y1, Cr]
+    {0, 3, 2, 1},   // YVYU: [Y0, Cr, Y1, Cb]
+    {1, 0, 3, 2},   // UYVY: [Cb, Y0, Cr, Y1]
+    {1, 2, 3, 0},   // VYUY: [Cr, Y0, Cb, Y1]
+};
+// 颜色矩阵(系数 /1024,作用于色差 C-128):
+//   行 = <Y缩放, Y偏移, CbR, CrR, CbG, CrG, CbB, CrB>
+static const int kMat[3][8] = {
+    {1024,   0,   0, 1436, -352, -731, 1815,    0},  // BT.601 全范围 0..255
+    {1164, -16,   0, 1634, -400, -833, 2066,    0},  // BT.601 限制范围 16..235
+    {1024,   0,   0, 1613, -192, -479, 1900,    0},  // BT.709 全范围
+};
+// 查表(必须 int;/短整型会被 516*127≈6.5万 撑爆 —— 曾导致 YUYV 颜色错乱)
+struct Tabs { int cbR[256], crR[256], cbG[256], crG[256], cbB[256], crB[256]; };
+static Tabs g_tabs[3];
+static void initTabs()
 {
-    static bool done = false;
-    if (done) return;
-    for (int i = 0; i < 256; ++i) {
-        int u = i - 128, v = i - 128;
-        // 按下标即原始字节值 0~255 建表,转换时直接查表
-        g_crv[i] = short(409  * v);   // 1.596 * 256
-        g_cgu[i] = short(-100 * u);   // 0.391 * 256
-        g_cbu[i] = short(516  * u);   // 2.018 * 256
-        g_cgv[i] = short(-208 * v);   // 0.813 * 256
-    }
-    done = true;
+    for (int m = 0; m < 3; ++m)
+        for (int i = 0; i < 256; ++i) {
+            const int c = i - 128;
+            g_tabs[m].cbR[i] = kMat[m][2] * c;
+            g_tabs[m].crR[i] = kMat[m][3] * c;
+            g_tabs[m].cbG[i] = kMat[m][4] * c;
+            g_tabs[m].crG[i] = kMat[m][5] * c;
+            g_tabs[m].cbB[i] = kMat[m][6] * c;
+            g_tabs[m].crB[i] = kMat[m][7] * c;
+        }
 }
 
 static inline quint32 clampRgb(int r, int g, int b)
 {
-    r = r >> 8; g = g >> 8; b = b >> 8;
     if (r < 0) r = 0; else if (r > 255) r = 255;
     if (g < 0) g = 0; else if (g > 255) g = 255;
     if (b < 0) b = 0; else if (b > 255) b = 255;
     return 0xff000000u | (quint32(r) << 16) | (quint32(g) << 8) | quint32(b);
 }
 
-static QImage yuyvToRgb32(const uchar *src, int w, int h, int stride)
+static QImage yuvToRgb32(const uchar *src, int w, int h, int stride,
+                         int layout, int matrix)
 {
-    initYuvTables();
-    const int rowBytes = w * 2;                 // YUYV: 每像素 2 字节
+    if (layout < 0 || layout > 3) layout = 0;
+    if (matrix < 0 || matrix > 2) matrix = 0;
+    const int *bg = kBgLayout[layout];
+    const Tabs &T = g_tabs[matrix];
+    const int ys = kMat[matrix][0], yo = kMat[matrix][1];
+
+    int rowBytes = w * 2;                   // YUYV: 每像素 2 字节
     if (stride < rowBytes) stride = rowBytes;
 
     QImage img(w, h, QImage::Format_RGB32);
     uchar *dst = img.bits();
-    const int pairs = w / 2;                    // 一行的像素对
+    const int pairs = w / 2;                // 一行的像素对
 
     for (int y = 0; y < h; ++y) {
         const uchar *p = src + size_t(y) * stride;
         quint32 *d = reinterpret_cast<quint32 *>(dst + size_t(y) * w * 4);
         for (int x = 0; x < pairs; ++x) {
-            int y0 = p[0], u = p[1], y1 = p[2], v = p[3];
+            const int y0 = p[bg[0]], c0 = p[bg[1]];
+            const int y1 = p[bg[2]], c1 = p[bg[3]];
             p += 4;
-            int cu0 = y0 * 298 + 128, cv0 = y0 * 298 + 128;
-            int cu1 = y1 * 298 + 128, cv1 = y1 * 298 + 128;
-            d[0] = clampRgb(cu0 + g_crv[v], cv0 + g_cgu[u] + g_cgv[v], cu0 + g_cbu[u]);
-            d[1] = clampRgb(cu1 + g_crv[v], cv1 + g_cgu[u] + g_cgv[v], cu1 + g_cbu[u]);
+            const int yb0 = (ys * (y0 + yo) + 512) >> 10;
+            const int yb1 = (ys * (y1 + yo) + 512) >> 10;
+            d[0] = clampRgb(yb0 + T.cbR[c0] + T.crR[c1],
+                            yb0 + T.cbG[c0] + T.crG[c1],
+                            yb0 + T.cbB[c0] + T.crB[c1]);
+            d[1] = clampRgb(yb1 + T.cbR[c0] + T.crR[c1],
+                            yb1 + T.cbG[c0] + T.crG[c1],
+                            yb1 + T.cbB[c0] + T.crB[c1]);
             d += 2;
-        }
-        if (w & 1) {            // 奇数宽: 最后 1 像素用上一对的 U/V
-            d[0] = 0xff000000u;
         }
     }
     return img;
@@ -213,7 +232,7 @@ QString CaptureThread::fourccToString(unsigned int fourcc)
 void CaptureThread::run()
 {
     m_stop.store(false);
-    initYuvTables();
+    initTabs();
 
     const QByteArray devBytes = m_device.toUtf8();
     int fd = ::open(devBytes.constData(), O_RDWR | O_NONBLOCK);
@@ -320,7 +339,8 @@ void CaptureThread::run()
         if (m_fourcc == V4L2_PIX_FMT_MJPEG)
             img = mjpgToRgb32(bufs[b.index], int(b.bytesused));
         else
-            img = yuyvToRgb32(bufs[b.index], w, h, stride);
+            img = yuvToRgb32(bufs[b.index], w, h, stride,
+                             m_layout.load(), m_matrix.load());
 
         ++frameCount;
         byteCount += b.bytesused;

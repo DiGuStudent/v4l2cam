@@ -11,6 +11,7 @@
 #include <QKeyEvent>
 #include <QShortcut>
 #include <QMessageBox>
+#include <QSettings>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -23,6 +24,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     buildUi();
     repopulateFormats();
     repopulateSizes();
+    fillColorBox();
 
     setWindowTitle(tr("V4L2 采集卡查看器"));
     resize(1100, 720);
@@ -63,6 +65,13 @@ void MainWindow::buildUi()
     m_sizeBox = new QComboBox(tb);
     m_sizeBox->setMinimumWidth(130);
     tb->addWidget(m_sizeBox);
+
+    tb->addWidget(new QLabel(tr(" 颜色 ")));
+    m_colorBox = new QComboBox(tb);
+    m_colorBox->setToolTip(tr("YUYV 字节序与颜色矩阵。画面颜色不对时在静止画面上逐个试,\n选到正确的那项自动记住。"));
+    tb->addWidget(m_colorBox);
+    connect(m_colorBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { onColorChanged(); });
 
     tb->addSeparator();
 
@@ -146,6 +155,37 @@ void MainWindow::repopulateFormats()
 void MainWindow::onFormatChanged()
 {
     repopulateSizes();
+}
+
+void MainWindow::fillColorBox()
+{
+    static const char *lay[] = { "YUYV", "YVYU", "UYVY", "VYUY" };
+    static const char *mat[] = { "BT.601全", "BT.601窄", "BT.709全" };
+    QSettings s;
+    const int savedLayout = s.value("decode/layout", 0).toInt();
+    const int savedMatrix = s.value("decode/matrix", 0).toInt();
+
+    m_colorBox->blockSignals(true);
+    for (int l = 0; l < 4; ++l)
+        for (int m = 0; m < 3; ++m)
+            m_colorBox->addItem(QString("%1 · %2").arg(lay[l]).arg(mat[m]),
+                                l * 3 + m);
+    const int idx = qBound(0, savedLayout * 3 + savedMatrix, m_colorBox->count() - 1);
+    m_colorBox->setCurrentIndex(idx);
+    m_colorBox->blockSignals(false);
+
+    m_thread->setDecode(savedLayout, savedMatrix);
+}
+
+void MainWindow::onColorChanged()
+{
+    const int v = m_colorBox->currentData().toInt();
+    const int layout = v / 3, matrix = v % 3;
+    m_thread->setDecode(layout, matrix);
+    QSettings s;
+    s.setValue("decode/layout", layout);
+    s.setValue("decode/matrix", matrix);
+    statusBar()->showMessage(tr("颜色解析: ") + m_colorBox->currentText(), 2000);
 }
 
 void MainWindow::repopulateSizes()
