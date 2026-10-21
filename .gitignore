@@ -1,6 +1,7 @@
 # 构建产物
 Makefile
 *.o
+moc_predefs.h
 *.moc
 moc_*.cpp
 qrc_*.cpp
