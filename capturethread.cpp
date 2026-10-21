@@ -365,16 +365,11 @@ void CaptureThread::run()
             continue;
         }
 
-        // 「存帧」诊断:本帧原样写盘,文件名带解码参数,并写 snapshots.log
+        // 「存帧」诊断:本帧原样写盘,并写 snapshots.log(解码固定 YUYV·BT.709全)
         if (m_snap.exchange(false) && !m_snapDir.isEmpty()) {
-            static const char *matName[4] = { "BT.601全", "BT.601窄", "BT.709全", "BT.709窄(=OBS)" };
-            static const char *layName[4] = { "YUYV", "YVYU", "UYVY", "VYUY" };
-            const int lay = m_layout.load(), mat = m_matrix.load();
             const qint64 ms = QDateTime::currentMSecsSinceEpoch();
-            const QString fname = QString("frame_%1_%2_%3_%4_%5x%6.raw")
+            const QString fname = QString("frame_%1_YUYV_%2_%3x%4.raw")
                                       .arg(ms)
-                                      .arg(layName[qBound(0, lay, 3)])
-                                      .arg("M" + QString::number(mat))
                                       .arg(fourccToString(actualFcc))
                                       .arg(w).arg(h);
             const QString path = m_snapDir + "/" + fname;
@@ -384,10 +379,8 @@ void CaptureThread::run()
                 fclose(fp);
                 FILE *logf = fopen((m_snapDir + "/snapshots.log").toUtf8().constData(), "a");
                 if (logf) {
-                    fprintf(logf, "%s | %s | %s | %s | %ux%u | %uB\n",
+                    fprintf(logf, "%s | YUYV | BT.709全 | %s | %ux%u | %uB\n",
                             QDateTime::currentDateTime().toString(Qt::ISODate).toUtf8().constData(),
-                            layName[qBound(0, lay, 3)],
-                            matName[qBound(0, mat, 3)],
                             fourccToString(actualFcc).toUtf8().constData(),
                             w, h, b.bytesused);
                     fclose(logf);
@@ -400,8 +393,7 @@ void CaptureThread::run()
         if (actualFcc == V4L2_PIX_FMT_MJPEG)
             img = mjpgToRgb32(bufs[b.index], int(b.bytesused));
         else
-            img = yuvToRgb32(bufs[b.index], w, h, stride,
-                             m_layout.load(), m_matrix.load());
+            img = yuvToRgb32(bufs[b.index], w, h, stride, 0, 2);   // 固定 YUYV·BT.709 全范围
 
         ++frameCount;
         byteCount += b.bytesused;

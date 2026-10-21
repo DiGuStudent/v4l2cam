@@ -11,10 +11,8 @@
 #include <QKeyEvent>
 #include <QShortcut>
 #include <QMessageBox>
-#include <QSettings>
 #include <QDir>
 #include <QDateTime>
-#include <QRegularExpression>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -30,7 +28,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     buildUi();
     repopulateFormats();
     repopulateSizes();
-    fillColorBox();
 
     setWindowTitle(tr("V4L2 采集卡查看器"));
     resize(1100, 720);
@@ -72,13 +69,6 @@ void MainWindow::buildUi()
     m_sizeBox = new QComboBox(tb);
     m_sizeBox->setMinimumWidth(130);
     tb->addWidget(m_sizeBox);
-
-    tb->addWidget(new QLabel(tr(" 颜色 ")));
-    m_colorBox = new QComboBox(tb);
-    m_colorBox->setToolTip(tr("YUYV 字节序与颜色矩阵。画面颜色不对时在静止画面上逐个试,\n选到正确的那项自动记住。"));
-    tb->addWidget(m_colorBox);
-    connect(m_colorBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this](int) { onColorChanged(); });
 
     tb->addSeparator();
 
@@ -135,12 +125,10 @@ void MainWindow::buildUi()
     shotBtn->setToolTip(tr("保存当前界面渲染出的画面 PNG(文件名带解码参数)"));
     tb->addWidget(shotBtn);
     connect(shotBtn, &QToolButton::clicked, this, [this]() {
-        QString combo = m_colorBox->currentText();
-        combo.remove(QRegularExpression("[^A-Za-z0-9]"));
         const QString dir = QDir::homePath() + "/v4l2cam_snapshots";
         QDir().mkpath(dir);
-        const QString path = dir + QString("/shot_%1_%2.png")
-                                 .arg(QDateTime::currentMSecsSinceEpoch()).arg(combo);
+        const QString path = dir + QString("/shot_%1_YUYV709full.png")
+                                 .arg(QDateTime::currentMSecsSinceEpoch());
         if (m_view->saveDisplayedPng(path))
             statusBar()->showMessage(tr("截图已存: ") + path, 6000);
         else
@@ -203,36 +191,6 @@ void MainWindow::repopulateFormats()
 void MainWindow::onFormatChanged()
 {
     repopulateSizes();
-}
-
-void MainWindow::fillColorBox()
-{
-    static const char *lay[] = { "YUYV", "YVYU", "UYVY", "VYUY" };
-    static const char *mat[] = { "BT.601全", "BT.601窄", "BT.709全", "BT.709窄(=OBS)" };
-    // 每次启动强制 OBS 同款默认(YUYV · BT.709窄),下拉只本次临时改,
-    // 防止测试时的残留配置把默认顶成别的 → 杜绝"怎么颜色又不对"的一整类问题
-    const int layout = 0, matrix = 3;
-
-    m_colorBox->blockSignals(true);
-    for (int l = 0; l < 4; ++l)
-        for (int m = 0; m < 4; ++m)
-            m_colorBox->addItem(QString("%1 · %2").arg(lay[l]).arg(mat[m]),
-                                l * 4 + m);
-    m_colorBox->setCurrentIndex(layout * 4 + matrix);
-    m_colorBox->blockSignals(false);
-
-    m_thread->setDecode(layout, matrix);
-}
-
-void MainWindow::onColorChanged()
-{
-    const int v = m_colorBox->currentData().toInt();
-    const int layout = v / 4, matrix = v % 4;
-    m_thread->setDecode(layout, matrix);
-    QSettings s;
-    s.setValue("decode/layout", layout);
-    s.setValue("decode/matrix", matrix);
-    statusBar()->showMessage(tr("颜色解析: ") + m_colorBox->currentText(), 2000);
 }
 
 void MainWindow::repopulateSizes()

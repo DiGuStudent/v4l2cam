@@ -25,15 +25,6 @@ public:
     void setFourcc(unsigned int fourcc) { m_fourcc = fourcc; }
     void setSize(int w, int h) { m_w = w; m_h = h; }
 
-    // YUV 解析参数(可随时改,下一帧生效,无需重启采集)
-    // layout: 0=YUYV 1=YVYU 2=UYVY 3=VYUY
-    // matrix: 0=BT.601全 1=BT.601窄(16-235) 2=BT.709全 3=BT.709窄(16-235,同OBS默认)
-    void setDecode(int layout, int matrix)
-    {
-        m_layout.store(layout);
-        m_matrix.store(matrix);
-    }
-
     void requestStop() { m_stop.store(true); }
 
     // 下一帧原样写盘(诊断用): 文件 = <path>/frame_<时间戳>.raw
@@ -64,8 +55,6 @@ private:
     int m_w = 1920;
     int m_h = 1080;
     std::atomic_bool m_stop{false};
-    std::atomic_int m_layout{0};    // YUYV 字节序
-    std::atomic_int m_matrix{3};    // BT.709 窄范围(同 OBS 默认)
     std::atomic_bool m_snap{false};
     QString m_snapDir;
 };
