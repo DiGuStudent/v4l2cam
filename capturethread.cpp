@@ -106,14 +106,16 @@ static QImage yuvToRgb32(const uchar *src, int w, int h, int stride,
             const int y1 = qBound(ymin, int(p[bg[2]]), ymax);
             const int c1 = qBound(cmin, int(p[bg[3]]), cmax);
             p += 4;
-            const int yb0 = (ys * (y0 + yo) + 512) >> 10;
-            const int yb1 = (ys * (y1 + yo) + 512) >> 10;
-            d[0] = clampRgb(yb0 + T.cbR[c0] + T.crR[c1],
-                            yb0 + T.cbG[c0] + T.crG[c1],
-                            yb0 + T.cbB[c0] + T.crB[c1]);
-            d[1] = clampRgb(yb1 + T.cbR[c0] + T.crR[c1],
-                            yb1 + T.cbG[c0] + T.crG[c1],
-                            yb1 + T.cbB[c0] + T.crB[c1]);
+            // ★亮度与色度必须"整体"右移 10 位;若仅亮度先移、色度原样加,色度会被放大~1024倍
+            // (曾致 YUYV 蓝桌面渲染成青绿 —— 与离线/GStreamer 差 ~120 的根因)
+            const int yb0 = ys * (y0 + yo);
+            const int yb1 = ys * (y1 + yo);
+            d[0] = clampRgb((yb0 + T.cbR[c0] + T.crR[c1] + 512) >> 10,
+                            (yb0 + T.cbG[c0] + T.crG[c1] + 512) >> 10,
+                            (yb0 + T.cbB[c0] + T.crB[c1] + 512) >> 10);
+            d[1] = clampRgb((yb1 + T.cbR[c0] + T.crR[c1] + 512) >> 10,
+                            (yb1 + T.cbG[c0] + T.crG[c1] + 512) >> 10,
+                            (yb1 + T.cbB[c0] + T.crB[c1] + 512) >> 10);
             d += 2;
         }
     }
