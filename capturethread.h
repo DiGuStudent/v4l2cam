@@ -43,6 +43,7 @@ signals:
     void frameReady(const QImage &img);
     void errorOccurred(const QString &msg);
     void snapshotSaved(const QString &path);
+    void stalled(double seconds);       // 持续无新帧(信号丢/设备停止送帧),GUI 看门狗据此自动重连
     // fps / 吞吐统计,约每 500ms 发一次
     void stats(double fps, double mbps, int w, int h, unsigned int fourcc);
 

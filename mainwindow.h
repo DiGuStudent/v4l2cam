@@ -22,6 +22,8 @@ protected:
 private slots:
     void onDeviceChanged();
     void onFormatChanged();
+    void onStalled(double seconds);
+    void restartIfStreaming();
     void startCapture();
     void stopCapture();
     void toggleCapture();
@@ -47,6 +49,8 @@ private:
     QLabel *m_statLabel = nullptr;
 
     bool m_streaming = false;
+    int m_restartCount = 0;         // 自动重连计数(成功收帧后清零)
+    bool m_restarting = false;      // 重连进行中,防止叠加
 };
 
 #endif // MAINWINDOW_H

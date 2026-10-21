@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QDateTime>
+#include <QTimer>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -21,6 +22,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(m_thread, &CaptureThread::frameReady, this, &MainWindow::onFrame);
     connect(m_thread, &CaptureThread::errorOccurred, this, &MainWindow::onError);
     connect(m_thread, &CaptureThread::stats, this, &MainWindow::onStats);
+    connect(m_thread, &CaptureThread::stalled, this, &MainWindow::onStalled);
+    connect(m_thread, &CaptureThread::finished, this, &MainWindow::restartIfStreaming);
     connect(m_thread, &CaptureThread::snapshotSaved, this, [this](const QString &p) {
         statusBar()->showMessage(tr("原始帧已存: ") + p, 6000);
     });
@@ -236,6 +239,7 @@ void MainWindow::stopCapture()
         m_thread->requestStop();
         m_thread->wait(1500);
     }
+    m_restartCount = 0;
     setStreamingUi(false);
     statusBar()->showMessage(tr("已停止"), 2000);
 }
@@ -266,6 +270,39 @@ void MainWindow::onFrame(const QImage &img)
 {
     m_view->setFrame(img);
     m_view->update();
+    if (m_restartCount != 0)
+        m_restartCount = 0;              // 又收到帧了,重连计数清零
+}
+
+void MainWindow::onStalled(double seconds)
+{
+    statusBar()->showMessage(tr("画面停滞 %.0fs —— 疑似信号丢失,尝试自动重连…").arg(seconds));
+    restartIfStreaming();
+}
+
+void MainWindow::restartIfStreaming()
+{
+    if (!m_streaming || m_restarting)
+        return;
+    if (m_restartCount >= 5) {
+        statusBar()->showMessage(tr("已多次自动重连失败,请检查采集卡信号/接线"), 0);
+        return;
+    }
+    m_restarting = true;
+    ++m_restartCount;
+    QTimer::singleShot(700, this, [this]() {
+        m_restarting = false;
+        if (!m_streaming) {             // 期间用户手动停了,作罢
+            m_restartCount = 0;
+            return;
+        }
+        if (m_thread->isRunning()) {
+            m_thread->requestStop();
+            m_thread->wait(1500);
+        }
+        startCapture();
+        statusBar()->showMessage(tr("已自动重连(%1/5)…").arg(m_restartCount), 3000);
+    });
 }
 
 void MainWindow::onStats(double fps, double mbps, int w, int h, unsigned int fourcc)

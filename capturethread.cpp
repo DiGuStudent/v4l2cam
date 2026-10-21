@@ -343,6 +343,8 @@ void CaptureThread::run()
     qint64 frameCount = 0;
     qint64 byteCount = 0;
     qint64 lastT = QDateTime::currentMSecsSinceEpoch();
+    qint64 lastFrameMs = QDateTime::currentMSecsSinceEpoch();   // 看门狗:最后收到帧的时刻
+    qint64 lastStallMs = -3000;                                 // 上次发 stalled 的时刻
 
     while (!m_stop.load()) {
         int pr = ::poll(&pfd, 1, 150);          // 150ms 超时,保证能退出
@@ -350,7 +352,14 @@ void CaptureThread::run()
             if (errno == EINTR) continue;
             break;
         }
-        if (pr == 0) continue;                  // 超时,检查退出标志
+        if (pr == 0) {                          // 超时,可能信号丢了 → 看门狗
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            if (now - lastFrameMs >= 3000 && now - lastStallMs >= 3000) {
+                emit stalled((now - lastFrameMs) / 1000.0);
+                lastStallMs = now;
+            }
+            continue;
+        }
 
         v4l2_buffer b{};
         b.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -402,6 +411,7 @@ void CaptureThread::run()
             emit frameReady(img);               // 队列连接,自动投递到 GUI 线程
 
         v4l2_ioctl(fd, VIDIOC_QBUF, &b);
+        lastFrameMs = QDateTime::currentMSecsSinceEpoch();   // 喂狗
 
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         if (now - lastT >= 500) {
