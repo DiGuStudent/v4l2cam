@@ -17,6 +17,17 @@
 
 #include <jpeglib.h>
 
+// ============== 经 libv4l2 采集(与 OBS v4l2 插件同一路径) ==============
+// 关键:MS2109 这类采集卡裸 ioctl 拿到的是芯片原始流,颜色就是错的;
+// libv4l2 会做格式协商/转换,和 OBS 看到的一致。头文件用显式声明避免依赖 libv4l-dev。
+extern "C" {
+int  v4l2_open(const char *file, int oflag, ...);
+int  v4l2_close(int fd);
+void *v4l2_mmap(void *start, size_t length, int prot, int flags, int fd, long long offset);
+int  v4l2_munmap(void *start, size_t length);
+int  v4l2_ioctl(int fd, unsigned long int request, ...);
+}
+
 // ============== YUV -> RGB32:可切换 字节序 + 颜色矩阵 (整数查表) ==============
 // 四种字节序:每 4 字节 = 两个像素共享一对色差。字节序下标:
 //   {y0, c0, y1, c1} = 该 4 字节组中 亮度0/色差0/亮度1/色差1 的偏移
@@ -172,14 +183,14 @@ QStringList CaptureThread::devices()
 std::vector<CaptureThread::FormatInfo> CaptureThread::enumFormats(const QString &dev)
 {
     std::vector<FormatInfo> out;
-    int fd = ::open(dev.toUtf8().constData(), O_RDWR);
+    int fd = v4l2_open(dev.toUtf8().constData(), O_RDWR);
     if (fd < 0) return out;
 
     for (int i = 0; i < 32; ++i) {
         v4l2_fmtdesc f{};
         f.index = i;
         f.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        if (::ioctl(fd, VIDIOC_ENUM_FMT, &f) < 0)
+        if (v4l2_ioctl(fd, VIDIOC_ENUM_FMT, &f) < 0)
             break;
         FormatInfo fi;
         fi.fourcc = f.pixelformat;
@@ -189,21 +200,21 @@ std::vector<CaptureThread::FormatInfo> CaptureThread::enumFormats(const QString 
             fi.description = fourccToString(f.pixelformat);
         out.push_back(fi);
     }
-    ::close(fd);
+    v4l2_close(fd);
     return out;
 }
 
 std::vector<CaptureThread::SizeInfo> CaptureThread::enumSizes(const QString &dev, unsigned int fourcc)
 {
     std::vector<SizeInfo> out;
-    int fd = ::open(dev.toUtf8().constData(), O_RDWR);
+    int fd = v4l2_open(dev.toUtf8().constData(), O_RDWR);
     if (fd < 0) return out;
 
     for (int i = 0; i < 64; ++i) {
         v4l2_frmsizeenum fr{};
         fr.index = i;
         fr.pixel_format = fourcc;
-        if (::ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &fr) < 0)
+        if (v4l2_ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &fr) < 0)
             break;
         if (fr.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
             out.push_back({ int(fr.discrete.width), int(fr.discrete.height) });
@@ -215,7 +226,7 @@ std::vector<CaptureThread::SizeInfo> CaptureThread::enumSizes(const QString &dev
                     out.push_back({ w, h });
         }
     }
-    ::close(fd);
+    v4l2_close(fd);
     return out;
 }
 
@@ -237,21 +248,21 @@ void CaptureThread::run()
     initTabs();
 
     const QByteArray devBytes = m_device.toUtf8();
-    int fd = ::open(devBytes.constData(), O_RDWR | O_NONBLOCK);
+    int fd = v4l2_open(devBytes.constData(), O_RDWR | O_NONBLOCK);
     if (fd < 0) {
         emit errorOccurred(QString("无法打开设备 %1:").arg(m_device) + strerror(errno));
         return;
     }
 
     v4l2_capability cap{};
-    if (::ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0) {
+    if (v4l2_ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0) {
         emit errorOccurred(QString("VIDIOC_QUERYCAP 失败: ") + strerror(errno));
-        ::close(fd);
+        v4l2_close(fd);
         return;
     }
     if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
         emit errorOccurred(m_device + " 不是视频采集设备");
-        ::close(fd);
+        v4l2_close(fd);
         return;
     }
 
@@ -262,24 +273,26 @@ void CaptureThread::run()
     fmt.fmt.pix.height = uint(m_h);
     fmt.fmt.pix.pixelformat = m_fourcc;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
-    if (::ioctl(fd, VIDIOC_S_FMT, &fmt) < 0) {
+    if (v4l2_ioctl(fd, VIDIOC_S_FMT, &fmt) < 0) {
         emit errorOccurred(QString("设置格式失败(%1x%2): ").arg(m_w).arg(m_h)
                            + strerror(errno));
-        ::close(fd);
+        v4l2_close(fd);
         return;
     }
     const int w = int(fmt.fmt.pix.width);
     const int h = int(fmt.fmt.pix.height);
     const int stride = int(fmt.fmt.pix.bytesperline);
+    // 以实际落地格式为准(经 libv4l2 协商后可能与请求不同)
+    const unsigned actualFcc = fmt.fmt.pix.pixelformat;
 
     // 申请 mmap 缓冲
     v4l2_requestbuffers req{};
     req.count = 4;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_MMAP;
-    if (::ioctl(fd, VIDIOC_REQBUFS, &req) < 0 || req.count < 2) {
+    if (v4l2_ioctl(fd, VIDIOC_REQBUFS, &req) < 0 || req.count < 2) {
         emit errorOccurred(QString("VIDIOC_REQBUFS 失败: ") + strerror(errno));
-        ::close(fd);
+        v4l2_close(fd);
         return;
     }
 
@@ -290,25 +303,26 @@ void CaptureThread::run()
         b.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         b.memory = V4L2_MEMORY_MMAP;
         b.index = uint(i);
-        if (::ioctl(fd, VIDIOC_QUERYBUF, &b) < 0) {
+        if (v4l2_ioctl(fd, VIDIOC_QUERYBUF, &b) < 0) {
             emit errorOccurred("VIDIOC_QUERYBUF 失败");
-            ::close(fd);
+            v4l2_close(fd);
             return;
         }
         lens[i] = b.length;
         bufs[i] = static_cast<uchar *>(
-            ::mmap(nullptr, b.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, b.m.offset));
+            v4l2_mmap(nullptr, b.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+                      static_cast<long long>(b.m.offset)));
         if (bufs[i] == MAP_FAILED) {
-            emit errorOccurred("mmap 失败");
+            emit errorOccurred("v4l2_mmap 失败");
             bufs[i] = nullptr;
         }
         // QUERYBUF 后立即 QBUF 入队
-        ::ioctl(fd, VIDIOC_QBUF, &b);
+        v4l2_ioctl(fd, VIDIOC_QBUF, &b);
     }
 
     {
         int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        ::ioctl(fd, VIDIOC_STREAMON, &type);
+        v4l2_ioctl(fd, VIDIOC_STREAMON, &type);
     }
 
     pollfd pfd{ fd, POLLIN, 0 };
@@ -327,18 +341,30 @@ void CaptureThread::run()
         v4l2_buffer b{};
         b.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         b.memory = V4L2_MEMORY_MMAP;
-        if (::ioctl(fd, VIDIOC_DQBUF, &b) < 0) {
+        if (v4l2_ioctl(fd, VIDIOC_DQBUF, &b) < 0) {
             if (errno == EAGAIN) continue;
             emit errorOccurred(QString("VIDIOC_DQBUF 失败: ") + strerror(errno));
             break;
         }
         if (b.index >= bufs.size() || !bufs[b.index]) {
-            ::ioctl(fd, VIDIOC_QBUF, &b);
+            v4l2_ioctl(fd, VIDIOC_QBUF, &b);
             continue;
         }
 
+        // 「存帧」诊断:本帧原样写盘
+        if (m_snap.exchange(false) && !m_snapDir.isEmpty()) {
+            const QString path = m_snapDir + QString("/frame_%1.raw")
+                                     .arg(QDateTime::currentMSecsSinceEpoch());
+            FILE *fp = fopen(path.toUtf8().constData(), "wb");
+            if (fp) {
+                fwrite(bufs[b.index], 1, b.bytesused, fp);
+                fclose(fp);
+                emit snapshotSaved(path);
+            }
+        }
+
         QImage img;
-        if (m_fourcc == V4L2_PIX_FMT_MJPEG)
+        if (actualFcc == V4L2_PIX_FMT_MJPEG)
             img = mjpgToRgb32(bufs[b.index], int(b.bytesused));
         else
             img = yuvToRgb32(bufs[b.index], w, h, stride,
@@ -350,7 +376,7 @@ void CaptureThread::run()
         if (!img.isNull())
             emit frameReady(img);               // 队列连接,自动投递到 GUI 线程
 
-        ::ioctl(fd, VIDIOC_QBUF, &b);
+        v4l2_ioctl(fd, VIDIOC_QBUF, &b);
 
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         if (now - lastT >= 500) {
@@ -363,9 +389,15 @@ void CaptureThread::run()
     }
 
     int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    ::ioctl(fd, VIDIOC_STREAMOFF, &type);
+    v4l2_ioctl(fd, VIDIOC_STREAMOFF, &type);
     for (size_t i = 0; i < bufs.size(); ++i)
         if (bufs[i])
-            ::munmap(bufs[i], lens[i]);
-    ::close(fd);
+            v4l2_munmap(bufs[i], lens[i]);
+    v4l2_close(fd);
+}
+
+void CaptureThread::requestRawSnapshot(const QString &dir)
+{
+    m_snapDir = dir;
+    m_snap.store(true);
 }

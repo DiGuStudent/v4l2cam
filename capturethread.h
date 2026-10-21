@@ -36,6 +36,9 @@ public:
 
     void requestStop() { m_stop.store(true); }
 
+    // 下一帧原样写盘(诊断用): 文件 = <path>/frame_<时间戳>.raw
+    void requestRawSnapshot(const QString &dir);
+
     struct FormatInfo { unsigned int fourcc; QString description; };
     struct SizeInfo { int w; int h; };
 
@@ -48,6 +51,7 @@ public:
 signals:
     void frameReady(const QImage &img);
     void errorOccurred(const QString &msg);
+    void snapshotSaved(const QString &path);
     // fps / 吞吐统计,约每 500ms 发一次
     void stats(double fps, double mbps, int w, int h, unsigned int fourcc);
 
@@ -62,6 +66,8 @@ private:
     std::atomic_bool m_stop{false};
     std::atomic_int m_layout{0};    // YUYV 字节序
     std::atomic_int m_matrix{3};    // BT.709 窄范围(同 OBS 默认)
+    std::atomic_bool m_snap{false};
+    QString m_snapDir;
 };
 
 #endif // CAPTURETHREAD_H

@@ -12,6 +12,7 @@
 #include <QShortcut>
 #include <QMessageBox>
 #include <QSettings>
+#include <QDir>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -20,6 +21,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(m_thread, &CaptureThread::frameReady, this, &MainWindow::onFrame);
     connect(m_thread, &CaptureThread::errorOccurred, this, &MainWindow::onError);
     connect(m_thread, &CaptureThread::stats, this, &MainWindow::onStats);
+    connect(m_thread, &CaptureThread::snapshotSaved, this, [this](const QString &p) {
+        statusBar()->showMessage(tr("原始帧已存: ") + p, 6000);
+    });
 
     buildUi();
     repopulateFormats();
@@ -98,6 +102,21 @@ void MainWindow::buildUi()
     connect(fsBtn, &QToolButton::toggled, this, [this](bool on) {
         if (on) showFullScreen();
         else    showNormal();
+    });
+
+    QToolButton *snapBtn = new QToolButton(tb);
+    snapBtn->setText(tr("存帧"));
+    snapBtn->setToolTip(tr("将当前一帧原始 YUYV/MJPG 字节流写盘(调色诊断用)"));
+    tb->addWidget(snapBtn);
+    connect(snapBtn, &QToolButton::clicked, this, [this]() {
+        if (!m_thread->isRunning()) {
+            statusBar()->showMessage(tr("请先开始采集再存帧"), 2500);
+            return;
+        }
+        const QString dir = QDir::homePath() + "/v4l2cam_snapshots";
+        QDir().mkpath(dir);
+        m_thread->requestRawSnapshot(dir);
+        statusBar()->showMessage(tr("下一帧将存到 ~/v4l2cam_snapshots/"), 2500);
     });
 
     m_statLabel = new QLabel(tr("—"), this);
