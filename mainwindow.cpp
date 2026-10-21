@@ -14,6 +14,8 @@
 #include <QDir>
 #include <QDateTime>
 #include <QTimer>
+#include <QFile>
+#include <QTextStream>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -226,6 +228,7 @@ void MainWindow::startCapture()
         QMessageBox::warning(this, tr("无法启动"), tr("请选择有效的设备/格式/分辨率。"));
         return;
     }
+    diag(QString("开始采集 %1 %2 %3x%4").arg(dev).arg(fourcc).arg(sz.width()).arg(sz.height()));
     m_thread->setDevice(dev);
     m_thread->setFourcc(fcc);
     m_thread->setSize(sz.width(), sz.height());
@@ -270,13 +273,15 @@ void MainWindow::onFrame(const QImage &img)
 {
     m_view->setFrame(img);
     m_view->update();
+    m_lastFrameAt = QDateTime::currentMSecsSinceEpoch();
     if (m_restartCount != 0)
         m_restartCount = 0;              // 又收到帧了,重连计数清零
 }
 
 void MainWindow::onStalled(double seconds)
 {
-    statusBar()->showMessage(tr("画面停滞 %.0fs —— 疑似信号丢失,尝试自动重连…").arg(seconds));
+    diag(QString("STALL 无新帧 %.0fs").arg(seconds));
+    statusBar()->showMessage(tr("画面停滞 %.0fs —— 尝试自动重连…").arg(seconds));
     restartIfStreaming();
 }
 
@@ -284,12 +289,19 @@ void MainWindow::restartIfStreaming()
 {
     if (!m_streaming || m_restarting)
         return;
+    // 冷却 ≥8s,避免连续重连造成图像一直闪烁
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_lastRestartAt && now - m_lastRestartAt < 8000)
+        return;
     if (m_restartCount >= 5) {
+        diag("重连达上限(5),放弃自动重连");
         statusBar()->showMessage(tr("已多次自动重连失败,请检查采集卡信号/接线"), 0);
         return;
     }
     m_restarting = true;
+    m_lastRestartAt = now;
     ++m_restartCount;
+    diag(QString("RESTART 第%1次").arg(m_restartCount));
     QTimer::singleShot(700, this, [this]() {
         m_restarting = false;
         if (!m_streaming) {             // 期间用户手动停了,作罢
@@ -300,9 +312,22 @@ void MainWindow::restartIfStreaming()
             m_thread->requestStop();
             m_thread->wait(1500);
         }
+        diag("开始新一次采集(自动重连)");
         startCapture();
         statusBar()->showMessage(tr("已自动重连(%1/5)…").arg(m_restartCount), 3000);
     });
+}
+
+void MainWindow::diag(const QString &msg)
+{
+    const QString dir = QDir::homePath() + "/v4l2cam_snapshots";
+    QDir().mkpath(dir);
+    QFile f(dir + "/diag.log");
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream ts(&f);
+        ts << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz ")
+           << (isFullScreen() ? "[全屏] " : "") << msg << "\n";
+    }
 }
 
 void MainWindow::onStats(double fps, double mbps, int w, int h, unsigned int fourcc)
@@ -316,6 +341,7 @@ void MainWindow::onStats(double fps, double mbps, int w, int h, unsigned int fou
 
 void MainWindow::onError(const QString &msg)
 {
+    diag("ERROR " + msg);
     if (m_streaming) {
         m_startBtn->setChecked(false);
         setStreamingUi(false);

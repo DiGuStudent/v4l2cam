@@ -51,6 +51,10 @@ private:
     bool m_streaming = false;
     int m_restartCount = 0;         // 自动重连计数(成功收帧后清零)
     bool m_restarting = false;      // 重连进行中,防止叠加
+    qint64 m_lastFrameAt = 0;       // 最近一次收帧时刻(看门狗判停滞)
+    qint64 m_lastRestartAt = 0;     // 最近一次重连时刻(冷却用)
+
+    void diag(const QString &msg);  // 追加诊断日志 ~/v4l2cam_snapshots/diag.log
 };
 
 #endif // MAINWINDOW_H
