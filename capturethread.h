@@ -27,7 +27,7 @@ public:
 
     // YUV 解析参数(可随时改,下一帧生效,无需重启采集)
     // layout: 0=YUYV 1=YVYU 2=UYVY 3=VYUY
-    // matrix: 0=BT.601全范围 1=BT.601限制范围(16-235) 2=BT.709全范围
+    // matrix: 0=BT.601全 1=BT.601窄(16-235) 2=BT.709全 3=BT.709窄(16-235,同OBS默认)
     void setDecode(int layout, int matrix)
     {
         m_layout.store(layout);
@@ -61,7 +61,7 @@ private:
     int m_h = 1080;
     std::atomic_bool m_stop{false};
     std::atomic_int m_layout{0};    // YUYV 字节序
-    std::atomic_int m_matrix{0};    // BT.601 全范围
+    std::atomic_int m_matrix{3};    // BT.709 窄范围(同 OBS 默认)
 };
 
 #endif // CAPTURETHREAD_H

@@ -28,17 +28,19 @@ static const int kBgLayout[4][4] = {
 };
 // 颜色矩阵(系数 /1024,作用于色差 C-128):
 //   行 = <Y缩放, Y偏移, CbR, CrR, CbG, CrG, CbB, CrB>
-static const int kMat[3][8] = {
+// 默认 0..2 顺序:BT.601全 → BT.601窄 → BT.709全
+static const int kMat[4][8] = {
     {1024,   0,   0, 1436, -352, -731, 1815,    0},  // BT.601 全范围 0..255
     {1164, -16,   0, 1634, -400, -833, 2066,    0},  // BT.601 限制范围 16..235
     {1024,   0,   0, 1613, -192, -479, 1900,    0},  // BT.709 全范围
+    {1164, -16,   0, 1836, -218, -546, 2163,    0},  // BT.709 限制范围 16..235 (OBS v4l2 默认)
 };
 // 查表(必须 int;/短整型会被 516*127≈6.5万 撑爆 —— 曾导致 YUYV 颜色错乱)
 struct Tabs { int cbR[256], crR[256], cbG[256], crG[256], cbB[256], crB[256]; };
-static Tabs g_tabs[3];
+static Tabs g_tabs[4];
 static void initTabs()
 {
-    for (int m = 0; m < 3; ++m)
+    for (int m = 0; m < 4; ++m)
         for (int i = 0; i < 256; ++i) {
             const int c = i - 128;
             g_tabs[m].cbR[i] = kMat[m][2] * c;
@@ -62,7 +64,7 @@ static QImage yuvToRgb32(const uchar *src, int w, int h, int stride,
                          int layout, int matrix)
 {
     if (layout < 0 || layout > 3) layout = 0;
-    if (matrix < 0 || matrix > 2) matrix = 0;
+    if (matrix < 0 || matrix > 3) matrix = 0;
     const int *bg = kBgLayout[layout];
     const Tabs &T = g_tabs[matrix];
     const int ys = kMat[matrix][0], yo = kMat[matrix][1];

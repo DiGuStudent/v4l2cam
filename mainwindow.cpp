@@ -160,17 +160,17 @@ void MainWindow::onFormatChanged()
 void MainWindow::fillColorBox()
 {
     static const char *lay[] = { "YUYV", "YVYU", "UYVY", "VYUY" };
-    static const char *mat[] = { "BT.601全", "BT.601窄", "BT.709全" };
+    static const char *mat[] = { "BT.601全", "BT.601窄", "BT.709全", "BT.709窄(=OBS)" };
     QSettings s;
     const int savedLayout = s.value("decode/layout", 0).toInt();
-    const int savedMatrix = s.value("decode/matrix", 0).toInt();
+    const int savedMatrix = s.value("decode/matrix", 3).toInt();   // 默认同 OBS: 709 窄
 
     m_colorBox->blockSignals(true);
     for (int l = 0; l < 4; ++l)
-        for (int m = 0; m < 3; ++m)
+        for (int m = 0; m < 4; ++m)
             m_colorBox->addItem(QString("%1 · %2").arg(lay[l]).arg(mat[m]),
-                                l * 3 + m);
-    const int idx = qBound(0, savedLayout * 3 + savedMatrix, m_colorBox->count() - 1);
+                                l * 4 + m);
+    const int idx = qBound(0, savedLayout * 4 + savedMatrix, m_colorBox->count() - 1);
     m_colorBox->setCurrentIndex(idx);
     m_colorBox->blockSignals(false);
 
@@ -180,7 +180,7 @@ void MainWindow::fillColorBox()
 void MainWindow::onColorChanged()
 {
     const int v = m_colorBox->currentData().toInt();
-    const int layout = v / 3, matrix = v % 3;
+    const int layout = v / 4, matrix = v % 4;
     m_thread->setDecode(layout, matrix);
     QSettings s;
     s.setValue("decode/layout", layout);
