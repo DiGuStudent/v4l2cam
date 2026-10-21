@@ -28,6 +28,12 @@ void ViewWidget::clear()
     m_pan = QPointF(0, 0);
 }
 
+bool ViewWidget::saveDisplayedPng(const QString &path)
+{
+    QMutexLocker lock(&m_mutex);
+    return !m_img.isNull() && m_img.save(path, "PNG");
+}
+
 // ---- 以下私有助手均假定调用方已持有 m_mutex ----
 
 double ViewWidget::fitScaleLocked() const

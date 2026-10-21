@@ -13,6 +13,8 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QDir>
+#include <QDateTime>
+#include <QRegularExpression>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -128,6 +130,23 @@ void MainWindow::buildUi()
         statusBar()->showMessage(tr("下一帧将存到 ~/v4l2cam_snapshots/"), 2500);
     });
 
+    QToolButton *shotBtn = new QToolButton(tb);
+    shotBtn->setText(tr("截图"));
+    shotBtn->setToolTip(tr("保存当前界面渲染出的画面 PNG(文件名带解码参数)"));
+    tb->addWidget(shotBtn);
+    connect(shotBtn, &QToolButton::clicked, this, [this]() {
+        QString combo = m_colorBox->currentText();
+        combo.remove(QRegularExpression("[^A-Za-z0-9]"));
+        const QString dir = QDir::homePath() + "/v4l2cam_snapshots";
+        QDir().mkpath(dir);
+        const QString path = dir + QString("/shot_%1_%2.png")
+                                 .arg(QDateTime::currentMSecsSinceEpoch()).arg(combo);
+        if (m_view->saveDisplayedPng(path))
+            statusBar()->showMessage(tr("截图已存: ") + path, 6000);
+        else
+            statusBar()->showMessage(tr("尚无画面可截"), 2500);
+    });
+
     m_statLabel = new QLabel(tr("—"), this);
     statusBar()->addPermanentWidget(m_statLabel);
 
@@ -171,8 +190,11 @@ void MainWindow::repopulateFormats()
         m_formatBox->addItem(
             CaptureThread::fourccToString(fmts[i].fourcc) + tr(" — ") + fmts[i].description,
             fmts[i].fourcc);
-        if (fmts[i].fourcc == V4L2_PIX_FMT_YUYV)
-            prefer = int(i);                // 优先 YUYV(422): 低延迟高码率
+        // 本卡实测:YUYV 流色度偏低、MJPG 流色彩正常(=OBS) → 优先 MJPG
+        if (fmts[i].fourcc == V4L2_PIX_FMT_MJPEG)
+            prefer = int(i);
+        else if (prefer < 0 && fmts[i].fourcc == V4L2_PIX_FMT_YUYV)
+            prefer = int(i);
     }
     if (prefer >= 0)
         m_formatBox->setCurrentIndex(prefer);

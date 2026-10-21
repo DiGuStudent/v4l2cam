@@ -17,6 +17,7 @@ public:
 
     void setFrame(const QImage &img);   // 采集线程投递,内部加锁
     void clear();
+    bool saveDisplayedPng(const QString &path);   // 存当前显示的渲染画面
 
     void fitToWindow();                 // 缩放=1 (适合窗口)
     void zoom100();                     // 实际像素 1:1
