@@ -188,8 +188,12 @@ void ViewWidget::zoom100()
     {
         QMutexLocker lock(&m_mutex);
         const double sfit = fitScaleLocked();
-        if (sfit > 0)
-            applyZoomLocked(QPointF(rect().center()), 1.0 / sfit);   // eff = 1:1
+        if (sfit > 0 && !m_img.isNull()) {
+            m_zoom = 1.0 / sfit;                                   // eff = 实际像素 1:1
+            const double dx = m_img.width(), dy = m_img.height();  // eff=1 → 绘制尺寸=原始尺寸
+            m_pan.setX((width() - dx) / 2.0);                      // 视图中心对准画面中心
+            m_pan.setY((height() - dy) / 2.0);
+        }
     }
     emit zoomChanged(m_zoom);
     update();
