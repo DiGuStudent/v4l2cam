@@ -1,0 +1,10 @@
+# 构建产物
+Makefile
+*.o
+*.moc
+moc_*.cpp
+qrc_*.cpp
+v4l2cam
+/.qmake.cache
+/.qmake.stash
+build/
