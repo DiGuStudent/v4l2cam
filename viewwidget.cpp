@@ -160,6 +160,12 @@ void ViewWidget::mouseReleaseEvent(QMouseEvent *e)
     }
 }
 
+void ViewWidget::mouseDoubleClickEvent(QMouseEvent *e)
+{
+    if (e->button() == Qt::LeftButton)
+        fitToWindow();          // 双击 = 复原到适合窗口
+}
+
 void ViewWidget::fitToWindow()
 {
     {
