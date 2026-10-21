@@ -40,6 +40,7 @@ private:
 
     ViewWidget *m_view = nullptr;
     CaptureThread *m_thread = nullptr;
+    QToolBar *m_toolbar = nullptr;
 
     QComboBox *m_deviceBox = nullptr;
     QComboBox *m_formatBox = nullptr;

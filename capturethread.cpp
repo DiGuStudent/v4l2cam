@@ -363,14 +363,33 @@ void CaptureThread::run()
             continue;
         }
 
-        // 「存帧」诊断:本帧原样写盘
+        // 「存帧」诊断:本帧原样写盘,文件名带解码参数,并写 snapshots.log
         if (m_snap.exchange(false) && !m_snapDir.isEmpty()) {
-            const QString path = m_snapDir + QString("/frame_%1.raw")
-                                     .arg(QDateTime::currentMSecsSinceEpoch());
+            static const char *matName[4] = { "BT.601全", "BT.601窄", "BT.709全", "BT.709窄(=OBS)" };
+            static const char *layName[4] = { "YUYV", "YVYU", "UYVY", "VYUY" };
+            const int lay = m_layout.load(), mat = m_matrix.load();
+            const qint64 ms = QDateTime::currentMSecsSinceEpoch();
+            const QString fname = QString("frame_%1_%2_%3_%4_%5x%6.raw")
+                                      .arg(ms)
+                                      .arg(layName[qBound(0, lay, 3)])
+                                      .arg("M" + QString::number(mat))
+                                      .arg(fourccToString(actualFcc))
+                                      .arg(w).arg(h);
+            const QString path = m_snapDir + "/" + fname;
             FILE *fp = fopen(path.toUtf8().constData(), "wb");
             if (fp) {
                 fwrite(bufs[b.index], 1, b.bytesused, fp);
                 fclose(fp);
+                FILE *logf = fopen((m_snapDir + "/snapshots.log").toUtf8().constData(), "a");
+                if (logf) {
+                    fprintf(logf, "%s | %s | %s | %s | %ux%u | %uB\n",
+                            QDateTime::currentDateTime().toString(Qt::ISODate).toUtf8().constData(),
+                            layName[qBound(0, lay, 3)],
+                            matName[qBound(0, mat, 3)],
+                            fourccToString(actualFcc).toUtf8().constData(),
+                            w, h, b.bytesused);
+                    fclose(logf);
+                }
                 emit snapshotSaved(path);
             }
         }

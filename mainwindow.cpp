@@ -48,7 +48,8 @@ void MainWindow::buildUi()
     setCentralWidget(m_view = new ViewWidget(this));
     connect(m_view, &ViewWidget::zoomChanged, this, &MainWindow::onZoomChanged);
 
-    QToolBar *tb = addToolBar(tr("主工具栏"));
+    m_toolbar = addToolBar(tr("主工具栏"));
+    QToolBar *tb = m_toolbar;
     tb->setMovable(false);
     tb->setIconSize(QSize(16, 16));
 
@@ -99,9 +100,17 @@ void MainWindow::buildUi()
     fsBtn->setText(tr("全屏"));
     fsBtn->setCheckable(true);
     tb->addWidget(fsBtn);
+    // 全屏:只留图像,隐藏工具栏/状态栏,避免遮挡画面;退出再恢复
     connect(fsBtn, &QToolButton::toggled, this, [this](bool on) {
-        if (on) showFullScreen();
-        else    showNormal();
+        if (on) {
+            m_toolbar->setVisible(false);
+            statusBar()->setVisible(false);
+            showFullScreen();
+        } else {
+            m_toolbar->setVisible(true);
+            statusBar()->setVisible(true);
+            showNormal();
+        }
     });
 
     QToolButton *snapBtn = new QToolButton(tb);
