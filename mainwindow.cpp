@@ -190,10 +190,8 @@ void MainWindow::repopulateFormats()
         m_formatBox->addItem(
             CaptureThread::fourccToString(fmts[i].fourcc) + tr(" — ") + fmts[i].description,
             fmts[i].fourcc);
-        // 本卡实测:YUYV 流色度偏低、MJPG 流色彩正常(=OBS) → 优先 MJPG
-        if (fmts[i].fourcc == V4L2_PIX_FMT_MJPEG)
-            prefer = int(i);
-        else if (prefer < 0 && fmts[i].fourcc == V4L2_PIX_FMT_YUYV)
+        // OBS 截图对照(均值19,136,220):YUYV·709窄 与 OBS YUYV 数值一致 → 默认优先 YUYV
+        if (fmts[i].fourcc == V4L2_PIX_FMT_YUYV)
             prefer = int(i);
     }
     if (prefer >= 0)
