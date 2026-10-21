@@ -8,6 +8,7 @@
 ViewWidget::ViewWidget(QWidget *parent) : QWidget(parent)
 {
     setMinimumSize(160, 120);
+    setMouseTracking(true);          // 悬停也能更新手型,提示可拖拽
     QPalette pal = palette();
     pal.setColor(QPalette::Window, Qt::black);
     setPalette(pal);
@@ -49,13 +50,12 @@ double ViewWidget::fitScaleLocked() const
 
 void ViewWidget::clampPanLocked(QSizeF drawn)
 {
-    // 图像小于窗口 -> 居中; 大于窗口 -> 限制平移不把画面完全拖出窗口
+    // 允许自由拖拽:画面至少留 24px 可见(任意缩放、含适合窗口时都能按住拖动)
     const double w = width(), h = height();
     const double dx = drawn.width(), dy = drawn.height();
-    if (dx <= w) m_pan.setX((w - dx) / 2.0);
-    else         m_pan.setX(qBound(w - dx, m_pan.x(), 0.0));
-    if (dy <= h) m_pan.setY((h - dy) / 2.0);
-    else         m_pan.setY(qBound(h - dy, m_pan.y(), 0.0));
+    const double margin = 24.0;
+    m_pan.setX(qBound(margin - dx, m_pan.x(), w - margin));
+    m_pan.setY(qBound(margin - dy, m_pan.y(), h - margin));
 }
 
 void ViewWidget::applyZoomLocked(const QPointF &anchor, double newZoom)
@@ -131,14 +131,21 @@ void ViewWidget::mousePressEvent(QMouseEvent *e)
 
 void ViewWidget::mouseMoveEvent(QMouseEvent *e)
 {
-    if (!m_dragging)
+    bool hasImg;
+    {
+        QMutexLocker lock(&m_mutex);
+        hasImg = !m_img.isNull();
+    }
+    if (!m_dragging) {
+        setCursor(hasImg ? Qt::OpenHandCursor : Qt::ArrowCursor);   // 悬停提示可拖拽
         return;
+    }
     const QPoint delta = e->pos() - m_dragLast;
     m_dragLast = e->pos();
     {
         QMutexLocker lock(&m_mutex);
         m_pan += delta;
-        if (!m_img.isNull())
+        if (hasImg)
             clampPanLocked(QSizeF(m_img.width() * fitScaleLocked() * m_zoom,
                                   m_img.height() * fitScaleLocked() * m_zoom));
     }
@@ -149,7 +156,7 @@ void ViewWidget::mouseReleaseEvent(QMouseEvent *e)
 {
     if (e->button() == Qt::LeftButton && m_dragging) {
         m_dragging = false;
-        unsetCursor();
+        setCursor(Qt::OpenHandCursor);
     }
 }
 
