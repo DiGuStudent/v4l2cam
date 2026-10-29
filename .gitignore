@@ -1,11 +1,23 @@
-# 构建产物
+# 构建产物（qmake in-source 构建）
 Makefile
 *.o
+moc_*.cpp
 moc_predefs.h
 *.moc
-moc_*.cpp
 qrc_*.cpp
-v4l2cam
 /.qmake.cache
 /.qmake.stash
+/v4l2cam
+
+# 源码外构建
 build/
+
+# 编辑器 / IDE
+*.user
+.vscode/
+.idea/
+*.swp
+*~
+
+# 运行时生成的诊断文件
+v4l2cam_snapshots/

@@ -1,0 +1,19 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=false
+Name=v4l2cam
+Name[zh_CN]=V4L2 采集卡查看器
+Name[zh_TW]=V4L2 擷取卡檢視器
+GenericName=USB Capture Card Viewer
+GenericName[zh_CN]=USB 采集卡/摄像头查看器
+GenericName[zh_TW]=USB 擷取卡/攝影機檢視器
+Comment=Native V4L2 viewer for USB capture cards and webcams
+Comment[zh_CN]=原生 V4L2 查看 USB 采集卡，支持缩放/全屏/多格式
+Comment[zh_TW]=原生 V4L2 檢視 USB 擷取卡，支援縮放/全螢幕/多格式
+Exec=v4l2cam
+Icon=v4l2cam
+StartupNotify=true
+StartupWMClass=v4l2cam
+Categories=Graphics;Viewer;
+Keywords=v4l2;camera;capture;webcam;
