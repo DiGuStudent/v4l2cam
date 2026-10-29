@@ -2,6 +2,7 @@ QT       += core gui widgets
 CONFIG   += c++17
 TARGET   = v4l2cam
 TEMPLATE = app
+VERSION  = 1.0.0
 
 INCLUDEPATH += src
 
@@ -32,4 +33,7 @@ desktop.files = packaging/v4l2cam.desktop
 icon.path = $$PREFIX/share/icons/hicolor/256x256/apps
 icon.files = assets/icons/v4l2cam.png
 
-INSTALLS += target desktop icon
+icon_svg.path = $$PREFIX/share/icons/hicolor/scalable/apps
+icon_svg.files = assets/icons/v4l2cam.svg
+
+INSTALLS += target desktop icon icon_svg

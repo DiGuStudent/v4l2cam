@@ -69,11 +69,25 @@ make -j"$(nproc)"
 ### Install
 
 ```sh
+# Debian/Ubuntu 软件包（推荐）
+./packaging/build-deb.sh
+sudo apt install ./dist/v4l2cam_1.0.0_amd64.deb
+
+# 或者 qmake 安装
 sudo make -C build install          # installs to /usr/local by default
 sudo make -C build install PREFIX=/usr
 ```
 
 This installs the binary, the `.desktop` entry and the icon.
+
+For a per-user install without root:
+
+```sh
+qmake PREFIX="$HOME/.local" v4l2cam.pro && make && make install
+```
+
+(`~/.local/bin` is on the session `PATH`, so the `.desktop` entry's
+`Exec=v4l2cam` resolves.)
 
 ### Notes
 
@@ -102,8 +116,9 @@ This installs the binary, the `.desktop` entry and the icon.
 │   ├── capturethread.{h,cpp}
 │   └── viewwidget.{h,cpp}
 ├── assets/icons/           # application icons (SVG + PNG)
-├── packaging/              # .desktop entry
+├── packaging/              # .desktop entry + build-deb.sh
 ├── scripts/build.sh        # one-step out-of-source build
+├── dist/                   # generated .deb packages
 ├── v4l2cam.pro             # qmake project
 ├── LICENSE
 └── README.md
@@ -171,11 +186,24 @@ make -j"$(nproc)"
 ### 安装
 
 ```sh
+# Debian/Ubuntu 安装包（推荐）
+./packaging/build-deb.sh
+sudo apt install ./dist/v4l2cam_1.0.0_amd64.deb
+
+# 或者用 qmake 安装
 sudo make -C build install          # 默认安装到 /usr/local
 sudo make -C build install PREFIX=/usr
 ```
 
 会安装可执行文件、`.desktop` 启动项和图标。
+
+只装给当前用户（不需要 root）：
+
+```sh
+qmake PREFIX="$HOME/.local" v4l2cam.pro && make && make install
+```
+
+（`~/.local/bin` 已在会话 `PATH` 中，启动项的 `Exec=v4l2cam` 能直接找到。）
 
 ### 说明
 
@@ -200,8 +228,9 @@ sudo make -C build install PREFIX=/usr
 │   ├── capturethread.{h,cpp}
 │   └── viewwidget.{h,cpp}
 ├── assets/icons/           # 应用图标（SVG + PNG）
-├── packaging/              # .desktop 启动项
+├── packaging/              # .desktop 启动项 + deb 打包脚本
 ├── scripts/build.sh        # 一键源码外构建
+├── dist/                   # 生成的 .deb 安装包
 ├── v4l2cam.pro             # qmake 工程文件
 ├── LICENSE
 └── README.md

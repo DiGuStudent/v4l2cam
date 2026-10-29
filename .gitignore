@@ -21,3 +21,6 @@ build/
 
 # 运行时生成的诊断文件
 v4l2cam_snapshots/
+
+# 打包产物
+dist/
